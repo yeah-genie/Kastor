@@ -1,0 +1,5 @@
+{
+  "name": "Kastor",
+  "description": "A Scratch-like visual data analysis tool for non-programmers. Drag, drop, and connect blocks to process data, visualize results, and get AI-powered insights using Gemini.",
+  "requestFramePermissions": []
+}
