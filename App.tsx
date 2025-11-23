@@ -1,23 +1,31 @@
-
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Node, Edge, NodeType, NodeData, TransformType, DatasetRow } from './types';
 import { NodeBlock } from './components/NodeBlock';
 import { PropertiesPanel } from './components/PropertiesPanel';
-import { Search, LayoutGrid, Bell, HelpCircle, Workflow, PanelLeftClose, PanelLeftOpen, Calculator, ArrowUpDown, ListFilter, FileSpreadsheet, Filter, LineChart, PieChart, BarChart, Sparkles, Undo2, Redo2, ZoomIn, ZoomOut, Maximize, Hand, MousePointer2, PenLine, Eraser, ScatterChart, CreditCard, BookOpen, Play } from 'lucide-react';
+import { Search, Workflow, PanelLeftClose, PanelLeftOpen, Calculator, ArrowUpDown, ListFilter, FileSpreadsheet, Filter, LineChart, PieChart, BarChart, Sparkles, Undo2, Redo2, ZoomIn, ZoomOut, Hand, MousePointer2, ScatterChart, CreditCard, ArrowRight, Plus } from 'lucide-react';
+import { TutorialOverlay } from './components/TutorialOverlay';
 
-// SVG Path with Circle-to-Circle logic (Port based)
+// SVG Path with Smoother S-Curve
 const getEdgePath = (source: { x: number; y: number }, target: { x: number; y: number }) => {
-  // Node width is w-72 (18rem = 288px). Half is 144px.
-  const sourceX = source.x + 144;
+  // Node width is w-72 (288px). Half is 144px.
+  const sourceX = source.x + 144; 
   const targetX = target.x - 144;
   
   const deltaX = targetX - sourceX;
-  const controlPointX = sourceX + (deltaX * 0.5);
-  
-  return `M${sourceX},${source.y} C${controlPointX},${source.y} ${controlPointX},${target.y} ${targetX},${target.y}`;
+  const dist = Math.abs(deltaX);
+
+  // Dynamic control point offset based on distance for smoother curves
+  // Increased smoothing factor for nicer "s-curve"
+  const controlPointOffset = Math.max(dist * 0.5, 150); 
+
+  return `M${sourceX},${source.y} C${sourceX + controlPointOffset},${source.y} ${targetX - controlPointOffset},${target.y} ${targetX},${target.y}`;
 };
 
-// Simple CSV Parser
+// Grid Snapping Helper
+const SNAP_SIZE = 20;
+const snapToGrid = (val: number) => Math.round(val / SNAP_SIZE) * SNAP_SIZE;
+
+// Smart CSV Parser
 const parseCSV = (text: string): DatasetRow[] => {
     const lines = text.trim().split('\n');
     if (lines.length < 2) return [];
@@ -25,9 +33,24 @@ const parseCSV = (text: string): DatasetRow[] => {
     return lines.slice(1).map(line => {
         const values = line.split(',');
         const row: DatasetRow = {};
+        
         headers.forEach((h, i) => {
-            const val = values[i]?.trim();
-            row[h] = isNaN(Number(val)) ? val : Number(val);
+            let val = values[i]?.trim();
+            if (val === undefined) {
+                row[h] = '';
+                return;
+            }
+
+            if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+            if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
+
+            const numericVal = val.replace(/,/g, '');
+            
+            if (!isNaN(Number(numericVal)) && numericVal !== '') {
+                row[h] = Number(numericVal);
+            } else {
+                row[h] = val;
+            }
         });
         return row;
     });
@@ -41,8 +64,8 @@ const RECIPES = [
         description: 'Load CSV, Filter low values, and Sort by revenue.',
         nodes: [
             { id: 'r1-1', type: NodeType.SOURCE, position: { x: 0, y: 0 }, data: { label: 'Sales CSV', config: {} } },
-            { id: 'r1-2', type: NodeType.TRANSFORM, position: { x: 400, y: 0 }, data: { label: 'Filter Low Sales', subLabel: 'Filter', config: { transformType: TransformType.FILTER, filterColumn: 'Amount', filterValue: 100, summary: 'Filter: Amount > 100' } } },
-            { id: 'r1-3', type: NodeType.TRANSFORM, position: { x: 800, y: 0 }, data: { label: 'Sort Top Sales', subLabel: 'Sort', config: { transformType: TransformType.SORT, sortColumn: 'Amount', sortDirection: 'desc', summary: 'Sort: Amount' } } }
+            { id: 'r1-2', type: NodeType.TRANSFORM, position: { x: 500, y: 0 }, data: { label: 'Filter Low Sales', subLabel: 'Filter', config: { transformType: TransformType.FILTER, filterColumn: 'Amount', filterValue: 100, summary: 'Filter: Amount > 100' } } },
+            { id: 'r1-3', type: NodeType.TRANSFORM, position: { x: 1000, y: 0 }, data: { label: 'Sort Top Sales', subLabel: 'Sort', config: { transformType: TransformType.SORT, sortColumn: 'Amount', sortDirection: 'desc', summary: 'Sort: Amount' } } }
         ],
         edges: [
             { id: 'e1-1', source: 'r1-1', target: 'r1-2' },
@@ -55,8 +78,8 @@ const RECIPES = [
         description: 'Visualize total revenue and distribution.',
         nodes: [
             { id: 'r2-1', type: NodeType.SOURCE, position: { x: 0, y: 0 }, data: { label: 'Marketing Data', config: {} } },
-            { id: 'r2-2', type: NodeType.VISUALIZE, position: { x: 500, y: -100 }, data: { label: 'Total Spend', subLabel: 'KPI Card', config: { chartType: 'kpi', kpiColumn: 'Spend' } } },
-            { id: 'r2-3', type: NodeType.VISUALIZE, position: { x: 500, y: 100 }, data: { label: 'Spend by Channel', subLabel: 'Bar Chart', config: { chartType: 'bar', xAxis: 'Channel', yAxis: 'Spend' } } }
+            { id: 'r2-2', type: NodeType.VISUALIZE, position: { x: 500, y: -150 }, data: { label: 'Total Spend', subLabel: 'KPI Card', config: { chartType: 'kpi', kpiColumn: 'Spend' } } },
+            { id: 'r2-3', type: NodeType.VISUALIZE, position: { x: 500, y: 150 }, data: { label: 'Spend by Channel', subLabel: 'Bar Chart', config: { chartType: 'bar', xAxis: 'Channel', yAxis: 'Spend' } } }
         ],
         edges: [
             { id: 'e2-1', source: 'r2-1', target: 'r2-2' },
@@ -66,17 +89,17 @@ const RECIPES = [
 ];
 
 const App: React.FC = () => {
-  // --- State ---
-  const [nodes, setNodes] = useState<Node[]>([
-    {
-      id: 'start',
-      type: NodeType.SOURCE,
-      position: { x: 0, y: 0 },
-      data: { label: 'CSV Input', config: {} }
-    }
-  ]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+  const [nodes, setNodes] = useState<Node[]>(() => {
+      const saved = localStorage.getItem('kastor_nodes');
+      return saved ? JSON.parse(saved) : [{ id: 'start', type: NodeType.SOURCE, position: { x: 0, y: 0 }, data: { label: 'CSV Input', config: {} } }];
+  });
+  const [edges, setEdges] = useState<Edge[]>(() => {
+      const saved = localStorage.getItem('kastor_edges');
+      return saved ? JSON.parse(saved) : [];
+  });
+  
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   
   // Canvas State
   const [viewport, setViewport] = useState({ x: window.innerWidth / 2, y: window.innerHeight / 2, zoom: 1 });
@@ -93,27 +116,58 @@ const App: React.FC = () => {
   // Layout State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeSidebarTab, setActiveSidebarTab] = useState<'blocks' | 'recipes'>('blocks');
-  const [panelHeight, setPanelHeight] = useState(250);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+  // Lifted state to App for Tutorial access
+  const [activePanelTab, setActivePanelTab] = useState<'config' | 'preview'>('config');
   const [sidebarSearch, setSidebarSearch] = useState('');
+  
+  // Tutorial
+  const [tutorialStep, setTutorialStep] = useState(0);
 
   // History State
   const [history, setHistory] = useState<{nodes: Node[], edges: Edge[]}[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   const canvasRef = useRef<HTMLDivElement>(null);
-  const isSpacePressed = useRef(false); // Track spacebar state
+  const isSpacePressed = useRef(false);
+  
+  // Touch Panning State
+  const lastTouchCenter = useRef<{x: number, y: number} | null>(null);
 
-  // --- History Management ---
+  // Auto Save
+  useEffect(() => {
+      localStorage.setItem('kastor_nodes', JSON.stringify(nodes));
+      localStorage.setItem('kastor_edges', JSON.stringify(edges));
+  }, [nodes, edges]);
+
+  // Auto-open panel when node selected
+  useEffect(() => {
+      if (selectedNodeId) {
+          setIsPanelOpen(true);
+      }
+  }, [selectedNodeId]);
+
   const addToHistory = useCallback(() => {
       const currentState = { nodes: JSON.parse(JSON.stringify(nodes)), edges: [...edges] };
       const newHistory = history.slice(0, historyIndex + 1);
       newHistory.push(currentState);
-      // Limit history size
       if (newHistory.length > 20) newHistory.shift();
       setHistory(newHistory);
       setHistoryIndex(newHistory.length - 1);
   }, [nodes, edges, history, historyIndex]);
+
+  const handleDeleteNode = useCallback((id: string) => {
+    setNodes(prev => prev.filter((n) => n.id !== id));
+    setEdges(prev => prev.filter((e) => e.source !== id && e.target !== id));
+    if (selectedNodeId === id) setSelectedNodeId(null);
+    addToHistory();
+  }, [selectedNodeId, addToHistory]);
+
+  const handleDeleteEdge = useCallback((id: string) => {
+      setEdges(prev => prev.filter(e => e.id !== id));
+      if (selectedEdgeId === id) setSelectedEdgeId(null);
+      addToHistory();
+  }, [selectedEdgeId, addToHistory]);
 
   const handleUndo = () => {
       if (historyIndex > 0) {
@@ -133,8 +187,27 @@ const App: React.FC = () => {
       }
   };
 
-  // Keyboard Shortcuts (Undo/Redo)
+  const resetPipeline = () => {
+      setNodes([]);
+      setEdges([]);
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setViewport({ x: window.innerWidth / 2, y: window.innerHeight / 2, zoom: 1 });
+      // Force a history entry
+      addToHistory();
+  };
+
+  // --- GLOBAL MOUSE UP HANDLER FOR ROBUST DRAGGING ---
   useEffect(() => {
+      const handleGlobalMouseUp = () => {
+          setIsPanning(false);
+          setIsDraggingNode(false);
+          setDraggedNodeId(null);
+          setConnectingNodeId(null);
+          // Reset touch pan state
+          lastTouchCenter.current = null;
+      };
+
       const handleKeyDown = (e: KeyboardEvent) => {
           if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
               if (e.shiftKey) {
@@ -143,9 +216,23 @@ const App: React.FC = () => {
                   handleUndo();
               }
           }
-          // Spacebar for panning
           if (e.code === 'Space' && !e.repeat) {
              isSpacePressed.current = true;
+          }
+
+          // Delete key support
+          if ((e.key === 'Delete' || e.key === 'Backspace')) {
+              const activeEl = document.activeElement;
+              const isInput = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA';
+              
+              if (!isInput) {
+                  if (selectedNodeId) {
+                      handleDeleteNode(selectedNodeId);
+                  }
+                  if (selectedEdgeId) {
+                      handleDeleteEdge(selectedEdgeId);
+                  }
+              }
           }
       };
       const handleKeyUp = (e: KeyboardEvent) => {
@@ -154,15 +241,18 @@ const App: React.FC = () => {
            }
       };
 
+      window.addEventListener('mouseup', handleGlobalMouseUp);
+      window.addEventListener('touchend', handleGlobalMouseUp);
       window.addEventListener('keydown', handleKeyDown);
       window.addEventListener('keyup', handleKeyUp);
       return () => {
+          window.removeEventListener('mouseup', handleGlobalMouseUp);
+          window.removeEventListener('touchend', handleGlobalMouseUp);
           window.removeEventListener('keydown', handleKeyDown);
           window.removeEventListener('keyup', handleKeyUp);
       };
-  }, [history, historyIndex]);
+  }, [history, historyIndex, selectedNodeId, selectedEdgeId, handleDeleteNode, handleDeleteEdge]);
 
-  // --- Logic Engine ---
   const getInputNode = (targetNodeId: string, currentEdges: Edge[], currentNodes: Node[]): Node | undefined => {
       const edge = currentEdges.find(e => e.target === targetNodeId);
       if (!edge) return undefined;
@@ -171,594 +261,722 @@ const App: React.FC = () => {
 
   const calculateNodeOutput = (node: Node, inputData: any[] | undefined): any[] | undefined => {
       if (node.type === NodeType.SOURCE) {
-          // Parse CSV if present
-          if (node.data.fileContent && (!node.data.outputData || node.data.outputData.length === 0)) {
+          if (node.data.fileContent) {
               return parseCSV(node.data.fileContent);
           }
-          return node.data.outputData; 
+          // Initial sample data if empty
+          return [
+             { ID: 1, Name: 'Product A', Amount: 120, Category: 'Tech', Date: '2023-01-01' },
+             { ID: 2, Name: 'Product B', Amount: 80, Category: 'Home', Date: '2023-01-02' },
+             { ID: 3, Name: 'Product C', Amount: 200, Category: 'Tech', Date: '2023-01-03' },
+             { ID: 4, Name: 'Product D', Amount: 50, Category: 'Garden', Date: '2023-01-04' },
+             { ID: 5, Name: 'Product E', Amount: 150, Category: 'Home', Date: '2023-01-05' },
+          ];
       }
-      
+
       if (!inputData) return undefined;
 
       if (node.type === NodeType.TRANSFORM) {
+          const { config } = node.data;
           let result = [...inputData];
-          const config = node.data.config;
-          
-          switch (config.transformType) {
-              case TransformType.FILTER:
-                  if (config.filterColumn && config.filterValue !== undefined && config.filterValue !== '') {
-                      result = result.filter(row => {
-                          const val = Number(row[config.filterColumn]);
-                          return !isNaN(val) && val > Number(config.filterValue);
-                      });
-                  }
-                  break;
-              case TransformType.SORT:
-                  if (config.sortColumn) {
-                      result.sort((a, b) => {
-                          const valA = a[config.sortColumn];
-                          const valB = b[config.sortColumn];
-                          if (typeof valA === 'number' && typeof valB === 'number') {
-                              return config.sortDirection === 'asc' ? valA - valB : valB - valA;
-                          }
-                          const strA = String(valA);
-                          const strB = String(valB);
-                          return config.sortDirection === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
-                      });
-                  }
-                  break;
-              case TransformType.LIMIT:
-                  if (config.limitCount) {
-                      result = result.slice(0, config.limitCount);
-                  }
-                  break;
-              case TransformType.MATH:
-                  if (config.mathCol1 && config.mathCol2 && config.mathOp) {
-                      const newColName = `${config.mathCol1} ${config.mathOp} ${config.mathCol2}`;
-                      result = result.map(row => {
-                          const v1 = Number(row[config.mathCol1]) || 0;
-                          const v2 = Number(row[config.mathCol2]) || 0;
-                          let val = 0;
-                          if (config.mathOp === '+') val = v1 + v2;
-                          if (config.mathOp === '-') val = v1 - v2;
-                          if (config.mathOp === '*') val = v1 * v2;
-                          if (config.mathOp === '/') val = v2 !== 0 ? v1 / v2 : 0;
-                          return { ...row, [newColName]: Number(val.toFixed(2)) };
-                      });
-                  }
-                  break;
-              case TransformType.RENAME:
-                  if (config.renameColOld && config.renameColNew) {
-                      result = result.map(row => {
-                          const newRow = { ...row };
-                          newRow[config.renameColNew] = newRow[config.renameColOld];
-                          delete newRow[config.renameColOld];
-                          return newRow;
-                      });
-                  }
-                  break;
-              case TransformType.DROP:
-                  if (config.dropColumn) {
-                       result = result.map(row => {
-                          const newRow = { ...row };
-                          delete newRow[config.dropColumn];
-                          return newRow;
-                      });
-                  }
-                  break;
+
+          if (config.transformType === TransformType.FILTER) {
+              if (config.filterColumn && config.filterValue !== undefined) {
+                  result = result.filter(row => {
+                      const val = row[config.filterColumn];
+                      return Number(val) > Number(config.filterValue);
+                  });
+              }
           }
+          else if (config.transformType === TransformType.SORT) {
+              if (config.sortColumn) {
+                  result.sort((a, b) => {
+                      const valA = a[config.sortColumn];
+                      const valB = b[config.sortColumn];
+                      if (valA < valB) return config.sortDirection === 'desc' ? 1 : -1;
+                      if (valA > valB) return config.sortDirection === 'desc' ? -1 : 1;
+                      return 0;
+                  });
+              }
+          }
+          else if (config.transformType === TransformType.LIMIT) {
+              result = result.slice(0, config.limitCount || 10);
+          }
+          else if (config.transformType === TransformType.MATH) {
+              if (config.mathCol1 && config.mathCol2) {
+                  result = result.map(row => {
+                      const v1 = Number(row[config.mathCol1]) || 0;
+                      const v2 = Number(row[config.mathCol2]) || 0;
+                      let calc = 0;
+                      if (config.mathOp === '+') calc = v1 + v2;
+                      if (config.mathOp === '-') calc = v1 - v2;
+                      if (config.mathOp === '*') calc = v1 * v2;
+                      if (config.mathOp === '/') calc = v2 !== 0 ? v1 / v2 : 0;
+                      return { ...row, [`${config.mathCol1}_${config.mathOp}_${config.mathCol2}`]: calc };
+                  });
+              }
+          }
+          else if (config.transformType === TransformType.RENAME) {
+              if (config.renameColOld && config.renameColNew) {
+                   result = result.map(row => {
+                       const newRow = { ...row };
+                       newRow[config.renameColNew] = newRow[config.renameColOld];
+                       delete newRow[config.renameColOld];
+                       return newRow;
+                   });
+              }
+          }
+          else if (config.transformType === TransformType.DROP) {
+              if (config.dropColumn) {
+                  result = result.map(row => {
+                      const newRow = { ...row };
+                      delete newRow[config.dropColumn];
+                      return newRow;
+                  });
+              }
+          }
+          else if (config.transformType === TransformType.CLEAN) {
+              if (config.cleanColumn && config.cleanAction) {
+                  result = result.filter(row => {
+                      if (config.cleanAction === 'drop_missing') {
+                          const val = row[config.cleanColumn];
+                          return val !== null && val !== '' && val !== undefined;
+                      }
+                      return true;
+                  }).map(row => {
+                       if (config.cleanAction === 'trim' && typeof row[config.cleanColumn] === 'string') {
+                           return { ...row, [config.cleanColumn]: row[config.cleanColumn].trim() };
+                       }
+                       if (config.cleanAction === 'fill_zero' && (row[config.cleanColumn] === null || row[config.cleanColumn] === '')) {
+                           return { ...row, [config.cleanColumn]: 0 };
+                       }
+                       return row;
+                  });
+              }
+          }
+
           return result;
       }
-      return inputData;
+      
+      return inputData; // Visualize and AI just pass through for now (logic handled in props panel for display)
   };
 
-  // Data Propagation Effect
-  useEffect(() => {
-      let updatedNodes = [...nodes];
-      let hasChanged = false;
-      const processQueue = updatedNodes.filter(n => n.type === NodeType.SOURCE);
-      const processedIds = new Set<string>();
-      processQueue.forEach(n => processedIds.add(n.id));
+  // Reactive calculation of all nodes
+  const calculatedNodes = useMemo(() => {
+      const resolvedNodes = new Map<string, Node>();
+      const maxPasses = nodes.length + 1;
+      
+      nodes.forEach(n => resolvedNodes.set(n.id, { ...n }));
 
-      // Calculate Source Nodes first (Parsing)
-      processQueue.forEach(node => {
-          const newData = calculateNodeOutput(node, undefined);
-          if (newData && (!node.data.outputData || newData.length !== node.data.outputData.length)) {
-              node.data.outputData = newData;
-              hasChanged = true;
-          }
-      });
-
-      let safetyLoop = 0;
-      while(processedIds.size < updatedNodes.length && safetyLoop < 15) {
-          safetyLoop++;
-          const remaining = updatedNodes.filter(n => !processedIds.has(n.id));
-          
-          for (const node of remaining) {
-              const inputNode = getInputNode(node.id, edges, updatedNodes);
+      for (let pass = 0; pass < maxPasses; pass++) {
+          let changed = false;
+          nodes.forEach(node => {
+              const inputNode = getInputNode(node.id, edges, nodes);
+              const inputData = inputNode ? resolvedNodes.get(inputNode.id)?.data.outputData : undefined;
               
-              if (!inputNode && node.type !== NodeType.SOURCE) {
-                   if (node.data.outputData !== undefined) {
-                       node.data.outputData = undefined;
-                       hasChanged = true;
-                   }
-                   processedIds.add(node.id); 
-                   continue;
-              }
+              const output = calculateNodeOutput(node, inputData);
               
-              if (inputNode && processedIds.has(inputNode.id)) {
-                  const newData = calculateNodeOutput(node, inputNode.data.outputData);
-                  // Simple change detection
-                  const currentJson = JSON.stringify(node.data.outputData?.slice(0,5));
-                  const newJson = JSON.stringify(newData?.slice(0,5));
-                  const lengthChanged = node.data.outputData?.length !== newData?.length;
-                  
-                  if (currentJson !== newJson || lengthChanged) {
-                      node.data.outputData = newData;
-                      hasChanged = true;
-                  }
-                  processedIds.add(node.id);
+              const currentNode = resolvedNodes.get(node.id)!;
+              if (JSON.stringify(currentNode.data.outputData) !== JSON.stringify(output)) {
+                  resolvedNodes.set(node.id, { ...currentNode, data: { ...currentNode.data, outputData: output } });
+                  changed = true;
               }
-          }
+          });
+          if (!changed) break;
       }
-      if (hasChanged) {
-          setNodes([...updatedNodes]);
+      
+      return Array.from(resolvedNodes.values());
+  }, [nodes, edges]);
+
+  const handleUpdateNode = (id: string, newData: NodeData) => {
+      setNodes(prev => prev.map(n => n.id === id ? { ...n, data: newData } : n));
+      addToHistory();
+  };
+
+  // --- CANVAS EVENTS ---
+  const getClientPos = (e: React.MouseEvent | React.TouchEvent) => {
+      if ('touches' in e) {
+          return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       }
-  }, [edges, nodes.map(n => JSON.stringify(n.data.config) + n.data.fileContent).join('')]);
+      return { x: (e as React.MouseEvent).clientX, y: (e as React.MouseEvent).clientY };
+  }
 
-
-  // --- Infinite Canvas Handlers ---
-  
-  // Convert Screen Coords to World Coords
   const screenToWorld = (sx: number, sy: number) => ({
       x: (sx - viewport.x) / viewport.zoom,
       y: (sy - viewport.y) / viewport.zoom
   });
 
-  const handleWheel = (e: React.WheelEvent) => {
-      if (e.ctrlKey) {
-          // Zoom
-          e.preventDefault();
-          const zoomSensitivity = 0.001;
-          const newZoom = Math.min(Math.max(viewport.zoom - e.deltaY * zoomSensitivity, 0.2), 3);
-          setViewport(v => ({ ...v, zoom: newZoom }));
-      } else {
-          // Pan
-          setViewport(v => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
+  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+      // Deselect if clicking background (and not panning mode)
+      if (interactionMode === 'pointer' && 'button' in e && e.button === 0 && !isSpacePressed.current) {
+          setSelectedNodeId(null);
+          setSelectedEdgeId(null);
       }
-  };
 
-  const handleCanvasMouseDown = (e: React.MouseEvent) => {
-      // Pan if middle mouse, Space+Left, or Hand Tool active
-      if (e.button === 1 || (e.button === 0 && isSpacePressed.current) || (e.button === 0 && interactionMode === 'hand')) {
+      if (isSpacePressed.current || interactionMode === 'hand' || ('button' in e && e.button === 1)) {
           setIsPanning(true);
-          setLastMousePos({ x: e.clientX, y: e.clientY });
-          e.preventDefault();
+          const pos = getClientPos(e);
+          setLastMousePos(pos);
       }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-      if (isPanning) {
-          const dx = e.clientX - lastMousePos.x;
-          const dy = e.clientY - lastMousePos.y;
-          setViewport(v => ({ ...v, x: v.x + dx, y: v.y + dy }));
-          setLastMousePos({ x: e.clientX, y: e.clientY });
-          return;
+  const handleTouchStart = (e: React.TouchEvent) => {
+      if (e.touches.length === 2) {
+          // Multi-touch Pan Start
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          const center = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 };
+          lastTouchCenter.current = center;
+      } else if (e.touches.length === 1) {
+          // Delegate single touch to standard interaction logic
+          handleMouseDown(e);
       }
+  };
 
-      // Track mouse for edges
-      if (canvasRef.current) {
-          const rect = canvasRef.current.getBoundingClientRect();
-          const rawX = e.clientX - rect.left;
-          const rawY = e.clientY - rect.top;
-          const worldPos = screenToWorld(rawX, rawY);
+  const handleTouchMove = (e: React.TouchEvent) => {
+      if (e.touches.length === 2 && lastTouchCenter.current) {
+          // Two-finger Pan logic
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          const currentCenter = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 };
+          
+          const dx = currentCenter.x - lastTouchCenter.current.x;
+          const dy = currentCenter.y - lastTouchCenter.current.y;
+
+          setViewport(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+          lastTouchCenter.current = currentCenter;
+      } else if (e.touches.length === 1 && !lastTouchCenter.current) {
+          // Standard single finger interaction (moving nodes etc handled by mouseMove)
+          // We manually call mouse move logic for the first touch
+          const touch = e.touches[0];
+          const pos = { x: touch.clientX, y: touch.clientY };
+          const worldPos = screenToWorld(pos.x, pos.y);
           setMousePos(worldPos);
 
           if (isDraggingNode && draggedNodeId) {
-               setNodes(nodes.map(n => n.id === draggedNodeId ? { ...n, position: worldPos } : n));
+             const snappedX = snapToGrid(worldPos.x);
+             const snappedY = snapToGrid(worldPos.y);
+             setNodes(prev => prev.map(n => {
+                 if (n.id === draggedNodeId) {
+                     return { ...n, position: { x: snappedX, y: snappedY } };
+                 }
+                 return n;
+             }));
           }
       }
   };
 
-  const handleMouseUp = () => {
-      if (isDraggingNode) addToHistory(); // Save state after drag
-      setIsPanning(false);
-      setIsDraggingNode(false);
-      setDraggedNodeId(null);
+  const handleNodeMouseDown = (e: React.MouseEvent, id: string) => {
+      if (interactionMode === 'hand') return;
+      e.stopPropagation();
+      setIsDraggingNode(true);
+      setDraggedNodeId(id);
+      setSelectedNodeId(id);
+      setSelectedEdgeId(null);
+  };
+
+  const handleConnectStart = (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      setConnectingNodeId(id);
+      const pos = screenToWorld(e.clientX, e.clientY);
+      setMousePos(pos);
+  };
+
+  const handleConnectEnd = (e: React.MouseEvent, targetId: string) => {
+      e.stopPropagation();
+      if (connectingNodeId && connectingNodeId !== targetId) {
+          // Prevent cycles (simple check)
+          if (edges.some(edge => edge.source === targetId && edge.target === connectingNodeId)) return;
+          
+          // Prevent duplicate edges
+          if (edges.some(edge => edge.source === connectingNodeId && edge.target === targetId)) return;
+
+          const newEdge: Edge = {
+              id: `e-${Date.now()}`,
+              source: connectingNodeId,
+              target: targetId
+          };
+          setEdges(prev => [...prev, newEdge]);
+          addToHistory();
+      }
       setConnectingNodeId(null);
   };
 
-  // --- Node Actions ---
+  const handleMouseMove = (e: React.MouseEvent) => {
+      const pos = getClientPos(e);
+      const worldPos = screenToWorld(pos.x, pos.y);
+      setMousePos(worldPos);
 
-  const handleAddNode = (type: NodeType, label: string, transformType?: TransformType, chartType?: string) => {
-    const id = `node-${Date.now()}`;
-    // Place in center of viewport
-    const worldCenter = screenToWorld(canvasRef.current!.clientWidth / 2, canvasRef.current!.clientHeight / 2);
-    
-    const newNode: Node = {
-      id,
-      type,
-      position: { x: worldCenter.x + (Math.random() * 50 - 25), y: worldCenter.y + (Math.random() * 50 - 25) },
-      data: { 
-          label,
-          subLabel: type === NodeType.VISUALIZE ? (chartType || 'Visual') : (transformType ? transformType : type.replace('_', ' ')),
-          config: { transformType, chartType: chartType || 'bar' } 
-      },
-    };
-    setNodes([...nodes, newNode]);
-    setSelectedNodeId(id);
-    addToHistory();
+      if (isPanning) {
+          const dx = pos.x - lastMousePos.x;
+          const dy = pos.y - lastMousePos.y;
+          setViewport(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+          setLastMousePos(pos);
+      } else if (isDraggingNode && draggedNodeId) {
+          // Snap to grid when dragging
+          const snappedX = snapToGrid(worldPos.x);
+          const snappedY = snapToGrid(worldPos.y);
+          
+          setNodes(prev => prev.map(n => {
+              if (n.id === draggedNodeId) {
+                  return { ...n, position: { x: snappedX, y: snappedY } };
+              }
+              return n;
+          }));
+      }
   };
 
-  const handleLoadRecipe = (recipe: typeof RECIPES[0]) => {
-      // Calculate center of screen for recipe placement
-      const cx = viewport.x * -1 + window.innerWidth/2; 
+  // Zoom towards cursor
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const ZOOM_SENSITIVITY = 0.001;
+        const MIN_ZOOM = 0.1;
+        const MAX_ZOOM = 3;
+
+        const zoomDelta = -e.deltaY * ZOOM_SENSITIVITY;
+        let newZoom = viewport.zoom + zoomDelta;
+        newZoom = Math.max(MIN_ZOOM, Math.min(newZoom, MAX_ZOOM));
+
+        // Calculate mouse position relative to canvas
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const newViewportX = mouseX - (mouseX - viewport.x) * (newZoom / viewport.zoom);
+        const newViewportY = mouseY - (mouseY - viewport.y) * (newZoom / viewport.zoom);
+
+        setViewport({
+            x: newViewportX,
+            y: newViewportY,
+            zoom: newZoom
+        });
+    }
+  };
+
+  const handleZoomButton = (delta: number) => {
+      setViewport(prev => ({ 
+          ...prev, 
+          zoom: Math.min(Math.max(prev.zoom + delta, 0.1), 3),
+      }));
+  };
+
+  // Smart Add Node
+  const handleAddNode = (type: NodeType, subType?: any, label?: string) => {
+      const id = Date.now().toString();
       
-      // Create new nodes based on recipe
-      const newNodes = recipe.nodes.map(n => ({
-          ...n,
-          id: `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          // We'll need to remap edges, so keep track of original IDs if needed, 
-          // but for simplicity let's just generate new IDs and map edge indices
-      }));
+      let position = { x: 0, y: 0 };
+      let sourceNodeId: string | null = null;
 
-      // To properly link edges in a template, we need a map of templateId -> realId
-      const idMap: Record<string, string> = {};
-      recipe.nodes.forEach(n => {
-          idMap[n.id] = `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      });
+      if (selectedNodeId) {
+          const prevNode = nodes.find(n => n.id === selectedNodeId);
+          if (prevNode) {
+              // Snap new node position relative to previous
+              position = { x: snapToGrid(prevNode.position.x + 350), y: snapToGrid(prevNode.position.y) };
+              sourceNodeId = prevNode.id;
+          }
+      } else {
+          // Snap initial position to CENTER OF SCREEN
+          const centerX = (window.innerWidth / 2 - viewport.x) / viewport.zoom;
+          const centerY = (window.innerHeight / 2 - viewport.y) / viewport.zoom;
+          position = { x: snapToGrid(centerX), y: snapToGrid(centerY) };
+      }
 
-      const finalNodes = recipe.nodes.map(n => ({
-          ...n,
-          id: idMap[n.id],
-          position: { x: n.position.x, y: n.position.y } // Relative positioning
-      }));
+      const newNode: Node = {
+          id,
+          type,
+          position,
+          data: {
+              label: label || type,
+              config: subType ? (type === NodeType.TRANSFORM ? { transformType: subType } : { chartType: subType }) : {}
+          }
+      };
 
-      const finalEdges = recipe.edges.map(e => ({
-          id: `edge-${Date.now()}-${Math.random()}`,
-          source: idMap[e.source],
-          target: idMap[e.target]
-      }));
+      setNodes(prev => [...prev, newNode]);
 
-      setNodes(finalNodes);
-      setEdges(finalEdges);
-      setViewport({ x: window.innerWidth / 2 - 400, y: window.innerHeight / 2 - 100, zoom: 1 }); // Center view approx
+      if (sourceNodeId && type !== NodeType.SOURCE) {
+          const prevNode = nodes.find(n => n.id === sourceNodeId);
+          if (prevNode && prevNode.type !== NodeType.VISUALIZE && prevNode.type !== NodeType.AI_ANALYST) {
+              const newEdge: Edge = {
+                  id: `e-${Date.now()}`,
+                  source: sourceNodeId,
+                  target: id
+              };
+              setEdges(prev => [...prev, newEdge]);
+          }
+      }
+
+      setSelectedNodeId(id);
+      setIsPanelOpen(true);
+      setActivePanelTab('config'); // Reset to config when adding new
       addToHistory();
   };
 
-  const handleDeleteNode = (id: string) => {
-    setNodes(nodes.filter((n) => n.id !== id));
-    setEdges(edges.filter((e) => e.source !== id && e.target !== id));
-    if (selectedNodeId === id) setSelectedNodeId(null);
-    addToHistory();
+  const handleLoadRecipe = (recipe: typeof RECIPES[0]) => {
+      setNodes(recipe.nodes);
+      setEdges(recipe.edges);
+      setViewport({ x: window.innerWidth/2 - 500, y: window.innerHeight/2, zoom: 0.8 });
+      addToHistory();
   };
 
-  const handleUpdateNode = (id: string, newData: NodeData) => {
-      setNodes(nodes.map(n => n.id === id ? { ...n, data: newData } : n));
-  };
-
-  const selectedNode = nodes.find(n => n.id === selectedNodeId) || null;
-  const selectedNodeInput = useMemo(() => {
-      if (!selectedNode) return undefined;
-      if (selectedNode.type === NodeType.SOURCE) return selectedNode.data.outputData;
-      const inputNode = getInputNode(selectedNode.id, edges, nodes);
-      return inputNode ? inputNode.data.outputData : undefined;
-  }, [selectedNode, edges, nodes]);
-
-  // Filter sidebar items
-  const matchesSearch = (term: string) => term.toLowerCase().includes(sidebarSearch.toLowerCase());
+  const selectedNode = calculatedNodes.find(n => n.id === selectedNodeId) || null;
+  const inputNode = selectedNodeId ? getInputNode(selectedNodeId, edges, calculatedNodes) : undefined;
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-background text-gray-200 overflow-hidden selection:bg-primary/30">
+    <div className="w-screen h-screen overflow-hidden bg-background text-gray-200 font-sans flex select-none">
       
-      {/* TOP HEADER */}
-      <header className="h-14 bg-surface border-b border-border flex items-center justify-between px-6 z-40 shrink-0 shadow-sm">
-          <div className="flex items-center gap-8">
-             <div className="flex items-center gap-2.5">
-                 <div className="w-8 h-8 bg-gradient-to-br from-primary to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-primary/20 text-white">
-                    <Workflow className="w-5 h-5" strokeWidth={2.5} />
+      <TutorialOverlay 
+        step={tutorialStep} 
+        nodes={nodes} 
+        edges={edges} 
+        onNext={() => setTutorialStep(s => s + 1)} 
+        onClose={() => setTutorialStep(100)}
+        onReset={resetPipeline}
+        isSidebarOpen={isSidebarOpen}
+        setSidebarOpen={setIsSidebarOpen}
+        activePanelTab={activePanelTab}
+      />
+
+      {/* --- FLOATING SIDEBAR TOGGLE (Outside) --- */}
+      {!isSidebarOpen && (
+        <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="absolute left-4 top-4 w-10 h-10 bg-surface/80 backdrop-blur border border-border rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-surfaceHighlight transition-all z-[60] shadow-xl animate-in fade-in slide-in-from-left-2"
+            title="Open Sidebar"
+        >
+             <PanelLeftOpen className="w-5 h-5" />
+         </button>
+      )}
+
+      {/* --- REBUILT SIDEBAR --- */}
+      {/* Changed from width transition to margin transition for smoother sliding */}
+      <div className={`${isSidebarOpen ? 'ml-0' : '-ml-[280px]'} w-[280px] shrink-0 bg-[#13151f]/95 backdrop-blur-xl border-r border-white/5 transition-all duration-300 ease-in-out flex flex-col relative z-50 shadow-2xl`}>
+         
+         {/* FIX: Wrapper to prevent content squashing during transition */}
+         <div className="w-[280px] h-full flex flex-col">
+             {/* Header with Internal Close Button */}
+             <div className="h-16 flex items-center justify-between px-4 border-b border-white/5 shrink-0">
+                 <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center shadow shadow-primary/40">
+                         <Workflow className="w-5 h-5 text-white" />
+                    </div>
+                    <span className="font-bold text-lg tracking-tight text-white">Kastor</span>
                  </div>
-                 <span className="font-bold text-lg tracking-tight text-white">Kastor</span>
+                 <button 
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="text-gray-500 hover:text-white transition-colors p-2 rounded-md hover:bg-white/5"
+                    title="Close Sidebar"
+                 >
+                    <PanelLeftClose className="w-5 h-5" />
+                 </button>
+             </div>
+
+             {/* Segmented Control Tabs */}
+             <div className="px-4 pt-4 pb-2">
+                <div className="flex p-1 bg-black/20 rounded-lg border border-white/5">
+                    <button onClick={() => setActiveSidebarTab('blocks')} className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${activeSidebarTab === 'blocks' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}>
+                        Blocks
+                    </button>
+                    <button onClick={() => setActiveSidebarTab('recipes')} className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${activeSidebarTab === 'recipes' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}>
+                        Recipes
+                    </button>
+                </div>
              </div>
              
-             {/* Toolbar */}
-             <div className="flex items-center bg-surfaceHighlight rounded-lg p-1 border border-border shadow-inner">
-                <div className="flex items-center border-r border-gray-700 pr-2 mr-2 gap-1">
-                    <button onClick={handleUndo} disabled={historyIndex <= 0} className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 transition-colors" title="Undo (Ctrl+Z)">
-                        <Undo2 className="w-4 h-4" />
-                    </button>
-                    <button onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 transition-colors" title="Redo (Ctrl+Shift+Z)">
-                        <Redo2 className="w-4 h-4" />
-                    </button>
-                </div>
-                
-                <div className="flex items-center border-r border-gray-700 pr-2 mr-2 gap-1">
-                    <button 
-                        onClick={() => setInteractionMode('pointer')} 
-                        className={`p-1.5 rounded transition-colors ${interactionMode === 'pointer' ? 'bg-primary text-white shadow-sm' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
-                        title="Select Tool"
-                    >
-                        <MousePointer2 className="w-4 h-4" />
-                    </button>
-                    <button 
-                        onClick={() => setInteractionMode('hand')} 
-                        className={`p-1.5 rounded transition-colors ${interactionMode === 'hand' ? 'bg-primary text-white shadow-sm' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
-                        title="Pan Tool (Space+Drag)"
-                    >
-                        <Hand className="w-4 h-4" />
-                    </button>
-                </div>
-
-                <div className="flex items-center gap-1">
-                     <button onClick={() => setViewport(v => ({...v, zoom: Math.max(v.zoom - 0.1, 0.2)}))} className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors" title="Zoom Out">
-                        <ZoomOut className="w-4 h-4" />
-                    </button>
-                    <span className="text-xs font-mono text-gray-400 w-12 text-center">{Math.round(viewport.zoom * 100)}%</span>
-                     <button onClick={() => setViewport(v => ({...v, zoom: Math.min(v.zoom + 0.1, 3)}))} className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors" title="Zoom In">
-                        <ZoomIn className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setViewport({ x: window.innerWidth/2, y: window.innerHeight/2, zoom: 1 })} className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors" title="Reset View">
-                        <Maximize className="w-3 h-3" />
-                    </button>
-                </div>
-             </div>
-          </div>
-          <div className="flex items-center gap-4 text-gray-400">
-              <Bell className="w-5 h-5 hover:text-white cursor-pointer" />
-              <HelpCircle className="w-5 h-5 hover:text-white cursor-pointer" />
-          </div>
-      </header>
-
-      <div className="flex flex-1 overflow-hidden relative">
-          
-        {/* LEFT PALETTE */}
-        <div className={`bg-surface border-r border-border flex flex-col z-30 shadow-xl transition-all duration-300 ease-in-out overflow-hidden relative ${isSidebarOpen ? 'w-64' : 'w-0 border-r-0'}`}>
-            
-            {/* Sidebar Tabs */}
-            <div className="flex border-b border-border">
-                <button 
-                    onClick={() => setActiveSidebarTab('blocks')}
-                    className={`flex-1 py-3 text-xs font-medium flex justify-center items-center gap-2 transition-colors ${activeSidebarTab === 'blocks' ? 'text-white border-b-2 border-primary bg-surfaceHighlight/30' : 'text-gray-500 hover:text-gray-300'}`}
-                >
-                    <LayoutGrid className="w-3.5 h-3.5" /> Blocks
-                </button>
-                <button 
-                    onClick={() => setActiveSidebarTab('recipes')}
-                    className={`flex-1 py-3 text-xs font-medium flex justify-center items-center gap-2 transition-colors ${activeSidebarTab === 'recipes' ? 'text-white border-b-2 border-primary bg-surfaceHighlight/30' : 'text-gray-500 hover:text-gray-300'}`}
-                >
-                    <BookOpen className="w-3.5 h-3.5" /> Recipes
-                </button>
-            </div>
-
-            <div className="p-3 border-b border-border">
-                 {/* Search Bar */}
-                <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-500" />
+             {/* Search */}
+             <div className="px-4 py-2">
+                <div className="relative group">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" />
                     <input 
                         type="text" 
-                        placeholder={activeSidebarTab === 'blocks' ? "Search blocks..." : "Search recipes..."}
-                        className="w-full bg-surfaceHighlight border border-border rounded pl-8 pr-3 py-1.5 text-xs text-gray-300 focus:border-primary outline-none placeholder:text-gray-600"
+                        placeholder="Search components..." 
+                        className="w-full bg-black/20 border border-white/5 rounded-lg pl-9 pr-3 py-2.5 text-xs text-gray-300 focus:outline-none focus:border-primary/50 focus:bg-black/30 transition-all placeholder:text-gray-600"
                         value={sidebarSearch}
                         onChange={(e) => setSidebarSearch(e.target.value)}
                     />
                 </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-3 space-y-6">
-                
-                {/* BLOCKS TAB */}
-                {activeSidebarTab === 'blocks' && (
+             </div>
+
+             {/* Scrollable Content */}
+             <div className="flex-1 overflow-y-auto custom-scrollbar px-2 py-2 space-y-6" id="sidebar-content">
+                {activeSidebarTab === 'blocks' ? (
                     <>
-                    {matchesSearch('AI Analyst') && (
-                        <div className="space-y-2">
-                            <h3 className="text-[10px] font-bold text-gray-500 uppercase pl-1">AI Assistant</h3>
-                            <button onClick={() => handleAddNode(NodeType.AI_ANALYST, 'AI Analyst')} className="w-full flex items-center gap-3 p-2 rounded hover:bg-amber-500/10 border border-transparent hover:border-amber-500/30 text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-amber-500/20 p-1.5 rounded text-amber-500 group-hover:text-amber-400"><Sparkles className="w-4 h-4" /></div>
-                                AI Analyst
+                        {/* Premium AI Feature */}
+                        <div className="px-2">
+                            <button onClick={() => handleAddNode(NodeType.AI_ANALYST, undefined, 'Gemini Analyst')} className="w-full relative overflow-hidden flex items-center gap-3 p-4 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent hover:border-amber-500/60 hover:shadow-[0_0_15px_rgba(245,158,11,0.1)] group text-left transition-all duration-300">
+                                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <div className="relative p-2 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-lg shadow-amber-900/30">
+                                    <Sparkles className="w-5 h-5" />
+                                </div>
+                                <div className="relative">
+                                    <div className="text-sm font-bold text-amber-100 group-hover:text-white">Gemini Analyst</div>
+                                    <div className="text-[11px] text-amber-200/50">AI-powered insights</div>
+                                </div>
+                                <Plus className="w-5 h-5 text-amber-500 absolute right-3 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0" />
                             </button>
                         </div>
-                    )}
 
-                    <div className="space-y-2">
-                        <h3 className="text-[10px] font-bold text-gray-500 uppercase pl-1">Sources</h3>
-                        {matchesSearch('CSV') && (
-                            <button onClick={() => handleAddNode(NodeType.SOURCE, 'CSV File')} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-emerald-500/20 p-1.5 rounded text-emerald-500 group-hover:text-emerald-400"><FileSpreadsheet className="w-4 h-4" /></div>
-                                CSV Upload
-                            </button>
-                        )}
-                    </div>
-                    <div className="space-y-2">
-                        <h3 className="text-[10px] font-bold text-gray-500 uppercase pl-1">Transformations</h3>
-                        {matchesSearch('Filter') && (
-                            <button onClick={() => handleAddNode(NodeType.TRANSFORM, 'Filter', TransformType.FILTER)} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-blue-500/20 p-1.5 rounded text-blue-500 group-hover:text-blue-400"><Filter className="w-4 h-4" /></div>
-                                Filter Rows
-                            </button>
-                        )}
-                        {matchesSearch('Sort') && (
-                            <button onClick={() => handleAddNode(NodeType.TRANSFORM, 'Sort', TransformType.SORT)} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-blue-500/20 p-1.5 rounded text-blue-500 group-hover:text-blue-400"><ArrowUpDown className="w-4 h-4" /></div>
-                                Sort Data
-                            </button>
-                        )}
-                        {matchesSearch('Math') && (
-                            <button onClick={() => handleAddNode(NodeType.TRANSFORM, 'Math', TransformType.MATH)} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-blue-500/20 p-1.5 rounded text-blue-500 group-hover:text-blue-400"><Calculator className="w-4 h-4" /></div>
-                                Math Op
-                            </button>
-                        )}
-                        {matchesSearch('Limit') && (
-                            <button onClick={() => handleAddNode(NodeType.TRANSFORM, 'Limit', TransformType.LIMIT)} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-blue-500/20 p-1.5 rounded text-blue-500 group-hover:text-blue-400"><ListFilter className="w-4 h-4" /></div>
-                                Limit Rows
-                            </button>
-                        )}
-                        {matchesSearch('Rename') && (
-                            <button onClick={() => handleAddNode(NodeType.TRANSFORM, 'Rename', TransformType.RENAME)} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-blue-500/20 p-1.5 rounded text-blue-500 group-hover:text-blue-400"><PenLine className="w-4 h-4" /></div>
-                                Rename Column
-                            </button>
-                        )}
-                        {matchesSearch('Drop') && (
-                            <button onClick={() => handleAddNode(NodeType.TRANSFORM, 'Drop Column', TransformType.DROP)} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-blue-500/20 p-1.5 rounded text-blue-500 group-hover:text-blue-400"><Eraser className="w-4 h-4" /></div>
-                                Drop Column
-                            </button>
-                        )}
-                    </div>
-                    <div className="space-y-2">
-                        <h3 className="text-[10px] font-bold text-gray-500 uppercase pl-1">Visualize</h3>
-                        {matchesSearch('Bar') && (
-                            <button onClick={() => handleAddNode(NodeType.VISUALIZE, 'Bar Chart', undefined, 'bar')} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-purple-500/20 p-1.5 rounded text-purple-500 group-hover:text-purple-400"><BarChart className="w-4 h-4" /></div>
-                                Bar Chart
-                            </button>
-                        )}
-                        {matchesSearch('Line') && (
-                            <button onClick={() => handleAddNode(NodeType.VISUALIZE, 'Line Chart', undefined, 'line')} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-purple-500/20 p-1.5 rounded text-purple-500 group-hover:text-purple-400"><LineChart className="w-4 h-4" /></div>
-                                Line Chart
-                            </button>
-                        )}
-                        {matchesSearch('Pie') && (
-                            <button onClick={() => handleAddNode(NodeType.VISUALIZE, 'Pie Chart', undefined, 'pie')} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-purple-500/20 p-1.5 rounded text-purple-500 group-hover:text-purple-400"><PieChart className="w-4 h-4" /></div>
-                                Pie Chart
-                            </button>
-                        )}
-                        {matchesSearch('Scatter') && (
-                            <button onClick={() => handleAddNode(NodeType.VISUALIZE, 'Scatter Plot', undefined, 'scatter')} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-purple-500/20 p-1.5 rounded text-purple-500 group-hover:text-purple-400"><ScatterChart className="w-4 h-4" /></div>
-                                Scatter Plot
-                            </button>
-                        )}
-                        {matchesSearch('KPI') && (
-                            <button onClick={() => handleAddNode(NodeType.VISUALIZE, 'KPI Card', undefined, 'kpi')} className="w-full flex items-center gap-3 p-2 rounded hover:bg-surfaceHighlight border border-transparent hover:border-border text-sm text-gray-300 hover:text-white group transition-all">
-                                <div className="bg-purple-500/20 p-1.5 rounded text-purple-500 group-hover:text-purple-400"><CreditCard className="w-4 h-4" /></div>
-                                KPI Card
-                            </button>
-                        )}
-                    </div>
-                    </>
-                )}
-
-                {/* RECIPES TAB */}
-                {activeSidebarTab === 'recipes' && (
-                    <div className="space-y-4">
-                        {RECIPES.filter(r => matchesSearch(r.name)).map(recipe => (
-                            <div key={recipe.id} className="bg-surfaceHighlight/30 rounded-lg border border-border p-3 hover:border-primary/50 transition-colors group">
-                                <h4 className="text-sm font-semibold text-gray-200 mb-1">{recipe.name}</h4>
-                                <p className="text-xs text-gray-500 mb-3 leading-relaxed">{recipe.description}</p>
-                                <button 
-                                    onClick={() => handleLoadRecipe(recipe)}
-                                    className="w-full flex items-center justify-center gap-2 bg-primary/10 text-primary hover:bg-primary hover:text-white text-xs py-1.5 rounded transition-all"
-                                >
-                                    <Play className="w-3 h-3" fill="currentColor" /> Load Template
-                                </button>
+                        {/* Data Sources */}
+                        <div>
+                            <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-3 px-4">Data Sources</h3>
+                            <div className="space-y-1">
+                                 <button id="btn-add-source" onClick={() => handleAddNode(NodeType.SOURCE, undefined, 'CSV Upload')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-emerald-500"><FileSpreadsheet className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">CSV File</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
                             </div>
-                        ))}
+                        </div>
+                        
+                        {/* Transformations */}
+                        <div>
+                            <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-3 px-4">Transform</h3>
+                            <div className="space-y-1">
+                                 <button id="btn-add-filter" onClick={() => handleAddNode(NodeType.TRANSFORM, TransformType.FILTER, 'Filter Rows')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-blue-400"><Filter className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">Filter Rows</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
+                                 <button onClick={() => handleAddNode(NodeType.TRANSFORM, TransformType.SORT, 'Sort Data')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-blue-400"><ArrowUpDown className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">Sort Data</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
+                                 <button onClick={() => handleAddNode(NodeType.TRANSFORM, TransformType.MATH, 'Calculate')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-blue-400"><Calculator className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">Math Formula</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
+                                 <button onClick={() => handleAddNode(NodeType.TRANSFORM, TransformType.LIMIT, 'Top N')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-blue-400"><ListFilter className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">Limit / Top N</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
+                                 <button onClick={() => handleAddNode(NodeType.TRANSFORM, TransformType.CLEAN, 'Clean Data')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-blue-400"><Sparkles className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">Auto Clean</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
+                            </div>
+                        </div>
+
+                        {/* Visualization */}
+                        <div>
+                            <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-3 px-4">Visualize</h3>
+                            <div className="space-y-1">
+                                 <button id="btn-add-chart" onClick={() => handleAddNode(NodeType.VISUALIZE, 'bar', 'Bar Chart')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-purple-400"><BarChart className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">Bar Chart</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
+                                 <button onClick={() => handleAddNode(NodeType.VISUALIZE, 'line', 'Line Chart')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-purple-400"><LineChart className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">Line Chart</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
+                                 <button onClick={() => handleAddNode(NodeType.VISUALIZE, 'pie', 'Pie Chart')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-purple-400"><PieChart className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">Pie Chart</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
+                                 <button onClick={() => handleAddNode(NodeType.VISUALIZE, 'scatter', 'Scatter Chart')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-purple-400"><ScatterChart className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">Scatter Chart</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
+                                 <button onClick={() => handleAddNode(NodeType.VISUALIZE, 'kpi', 'KPI Card')} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/5 text-left transition-all group relative">
+                                     <div className="text-purple-400"><CreditCard className="w-5 h-5"/></div>
+                                     <span className="text-sm font-medium text-gray-400 group-hover:text-gray-200">KPI Card</span>
+                                     <Plus className="w-4 h-4 text-gray-600 group-hover:text-white absolute right-3 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </button>
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="space-y-3 px-2">
+                         {RECIPES.map(r => (
+                             <div key={r.id} className="p-4 rounded-xl bg-white/5 border border-white/5 hover:border-primary/50 hover:bg-white/10 cursor-pointer group transition-all duration-300" onClick={() => handleLoadRecipe(r)}>
+                                 <div className="flex items-center justify-between mb-1">
+                                    <h4 className="text-sm font-bold text-gray-200 group-hover:text-primary">{r.name}</h4>
+                                    <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-primary -translate-x-1 group-hover:translate-x-0 opacity-0 group-hover:opacity-100 transition-all" />
+                                 </div>
+                                 <p className="text-xs text-gray-400 leading-relaxed">{r.description}</p>
+                                 <div className="mt-3 flex items-center gap-2">
+                                     <span className="text-[10px] px-2 py-0.5 rounded bg-black/20 text-gray-500 border border-white/5">{r.nodes.length} Blocks</span>
+                                 </div>
+                             </div>
+                         ))}
                     </div>
                 )}
-            </div>
-        </div>
-        {!isSidebarOpen && (
-             <button onClick={() => setIsSidebarOpen(true)} className="absolute left-4 top-4 z-50 p-2 bg-surface border border-border rounded text-gray-400 hover:text-white"><PanelLeftOpen className="w-5 h-5" /></button>
-        )}
+             </div>
+         </div>
+      </div>
 
-        {/* CENTRAL CANVAS */}
-        <div className="flex-1 flex flex-col relative bg-background min-w-0">
-            <div 
-                ref={canvasRef}
-                className="flex-1 relative overflow-hidden infinite-grid"
-                style={{ 
-                    cursor: interactionMode === 'hand' || isPanning ? 'grab' : 'default',
-                    backgroundPosition: `${viewport.x}px ${viewport.y}px`,
-                    backgroundSize: `${40 * viewport.zoom}px ${40 * viewport.zoom}`
+      {/* --- CANVAS AREA --- */}
+      <div className="flex-1 relative overflow-hidden bg-[#0f111a]">
+          {/* Toolbar */}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface/80 backdrop-blur-md border border-border rounded-full p-1.5 flex items-center gap-1 shadow-2xl z-40">
+              <button onClick={() => handleUndo()} className="p-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-colors"><Undo2 className="w-4 h-4"/></button>
+              <button onClick={() => handleRedo()} className="p-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-colors"><Redo2 className="w-4 h-4"/></button>
+              <div className="w-px h-4 bg-border mx-1" />
+              <button 
+                onClick={() => setInteractionMode('pointer')} 
+                className={`p-2 rounded-full transition-colors ${interactionMode === 'pointer' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+              >
+                  <MousePointer2 className="w-4 h-4"/>
+              </button>
+              <button 
+                onClick={() => setInteractionMode('hand')} 
+                className={`p-2 rounded-full transition-colors ${interactionMode === 'hand' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+              >
+                  <Hand className="w-4 h-4"/>
+              </button>
+              <div className="w-px h-4 bg-border mx-1" />
+              <button onClick={() => handleZoomButton(-0.1)} className="p-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-colors"><ZoomOut className="w-4 h-4"/></button>
+              <span className="text-xs font-mono w-8 text-center text-gray-500">{Math.round(viewport.zoom * 100)}%</span>
+              <button onClick={() => handleZoomButton(0.1)} className="p-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-colors"><ZoomIn className="w-4 h-4"/></button>
+          </div>
+
+          {/* Infinite Canvas */}
+          <div 
+            ref={canvasRef}
+            className={`w-full h-full infinite-grid ${interactionMode === 'hand' || isSpacePressed.current ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
+            style={{
+                backgroundPosition: `${viewport.x}px ${viewport.y}px`,
+                backgroundSize: `${40 * viewport.zoom}px ${40 * viewport.zoom}px`
+            }}
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onMouseMove={handleMouseMove}
+            onWheel={handleWheel}
+          >
+              <div 
+                className="transform-gpu will-change-transform"
+                style={{
+                    transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+                    transformOrigin: '0 0'
                 }}
-                onWheel={handleWheel}
-                onMouseDown={handleCanvasMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onClick={(e) => { 
-                    if (!isDraggingNode && !isPanning) setSelectedNodeId(null); 
-                }}
-            >
-                {/* Transformation Layer */}
-                <div style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`, transformOrigin: '0 0', width: '100%', height: '100%' }}>
-                    
-                    {/* Edges */}
-                    <svg className="absolute top-0 left-0 overflow-visible pointer-events-none" style={{ width: '1px', height: '1px' }}>
-                         <defs>
-                            <linearGradient id="gradientStroke" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" stopColor="#6366f1" />
-                                <stop offset="100%" stopColor="#8b5cf6" />
-                            </linearGradient>
-                        </defs>
-                        {edges.map(edge => {
-                            const sourceNode = nodes.find(n => n.id === edge.source);
-                            const targetNode = nodes.find(n => n.id === edge.target);
-                            if (!sourceNode || !targetNode) return null;
-                            return (
-                                <g key={edge.id}>
-                                    {/* Flow animation path */}
-                                    <path d={getEdgePath(sourceNode.position, targetNode.position)} stroke="url(#gradientStroke)" strokeWidth="3" fill="none" className="opacity-40" />
-                                    <path d={getEdgePath(sourceNode.position, targetNode.position)} stroke="#8b5cf6" strokeWidth="3" strokeDasharray="4 8" fill="none" className="animate-flow opacity-80" />
-                                </g>
-                            );
-                        })}
-                        {connectingNodeId && (
+              >
+                  <svg 
+                    className="absolute top-0 left-0 pointer-events-none" 
+                    width="0" 
+                    height="0" 
+                    style={{ overflow: 'visible' }}
+                  >
+                      <defs>
+                        <linearGradient id="gradient-flow" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#6366f1" stopOpacity="0.6" />
+                            <stop offset="100%" stopColor="#a855f7" stopOpacity="1" />
+                        </linearGradient>
+                      </defs>
+                      
+                      {edges.map(edge => {
+                          const sourceNode = nodes.find(n => n.id === edge.source);
+                          const targetNode = nodes.find(n => n.id === edge.target);
+                          if (!sourceNode || !targetNode) return null;
+                          
+                          const path = getEdgePath(sourceNode.position, targetNode.position);
+                          const isNodeSelected = selectedNodeId === edge.source || selectedNodeId === edge.target;
+                          const isEdgeSelected = selectedEdgeId === edge.id;
+                          const isSelected = isNodeSelected || isEdgeSelected;
+
+                          return (
+                              <g 
+                                key={edge.id} 
+                                className="transition-opacity duration-300 hover:opacity-100 pointer-events-auto cursor-pointer"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedEdgeId(edge.id);
+                                    setSelectedNodeId(null);
+                                }}
+                              >
+                                  {/* Hit area - invisible wide stroke for easier clicking */}
+                                  <path 
+                                    d={path}
+                                    fill="none"
+                                    stroke="transparent"
+                                    strokeWidth="20"
+                                    strokeLinecap="round"
+                                  />
+
+                                  {/* Base Shadow Line */}
+                                  <path 
+                                    d={path}
+                                    fill="none"
+                                    stroke={isEdgeSelected ? "#6366f1" : "#0f111a"}
+                                    strokeWidth={isEdgeSelected ? "8" : "6"}
+                                    strokeLinecap="round"
+                                    className="transition-colors"
+                                  />
+                                  {/* Main Line */}
+                                  <path 
+                                    d={path}
+                                    fill="none"
+                                    stroke={isSelected ? "url(#gradient-flow)" : "#334155"}
+                                    strokeWidth={isSelected ? "3" : "2"}
+                                    className="transition-all duration-300"
+                                    strokeLinecap="round"
+                                  />
+                                  {/* Animated Flow Dashes - Giving the 'Flow' effect */}
+                                  <path 
+                                    d={path}
+                                    fill="none"
+                                    stroke="rgba(255,255,255,0.5)"
+                                    strokeWidth="2"
+                                    strokeDasharray="4 8"
+                                    className="animate-flow opacity-0 transition-opacity duration-300"
+                                    style={{ opacity: isSelected ? 0.6 : 0.1 }}
+                                    strokeLinecap="round"
+                                  />
+                              </g>
+                          )
+                      })}
+                      
+                      {/* Dragging Connection Line */}
+                      {connectingNodeId && (
+                          <g>
                             <path 
                                 d={getEdgePath(nodes.find(n => n.id === connectingNodeId)!.position, mousePos)}
-                                stroke="#6366f1" strokeWidth="2" strokeDasharray="5,5" fill="none" className="opacity-50"
+                                fill="none"
+                                stroke="#6366f1"
+                                strokeWidth="2"
+                                strokeDasharray="5,5"
+                                className="animate-pulse opacity-80"
                             />
-                        )}
-                    </svg>
+                            <circle cx={mousePos.x} cy={mousePos.y} r="4" fill="#6366f1" />
+                          </g>
+                      )}
+                  </svg>
 
-                    {/* Nodes */}
-                    {nodes.map(node => (
-                        <NodeBlock
-                            key={node.id}
-                            node={node}
-                            isSelected={selectedNodeId === node.id}
-                            onSelect={setSelectedNodeId}
-                            onDelete={handleDeleteNode}
-                            onMouseDown={(e, id) => {
-                                // Only allow selection/dragging if not in Hand mode
-                                if (interactionMode === 'hand') return; 
-                                setIsDraggingNode(true);
-                                setDraggedNodeId(id);
-                            }}
-                            onConnectStart={(e, id) => {
-                                e.stopPropagation();
-                                if (interactionMode === 'hand') return;
-                                setConnectingNodeId(id);
-                            }}
-                            onConnectEnd={(e, id) => {
-                                e.stopPropagation();
-                                if (connectingNodeId && connectingNodeId !== id) {
-                                    if (!edges.some(edge => edge.source === connectingNodeId && edge.target === id)) {
-                                        setEdges([...edges, { id: `e-${Date.now()}`, source: connectingNodeId, target: id }]);
-                                        addToHistory();
-                                    }
-                                }
-                                setConnectingNodeId(null);
-                            }}
-                        />
-                    ))}
-                </div>
-            </div>
-
-            <PropertiesPanel 
-                node={selectedNode} 
-                inputData={selectedNodeInput || (selectedNode?.type === NodeType.SOURCE ? selectedNode.data.outputData : undefined)}
-                onUpdateNode={handleUpdateNode}
-                height={panelHeight}
-                isOpen={isPanelOpen}
-                onToggle={() => setIsPanelOpen(!isPanelOpen)}
-                onResizeStart={() => {}}
-            />
-        </div>
+                  {/* Nodes Layer */}
+                  {calculatedNodes.map(node => (
+                      <NodeBlock 
+                        key={node.id}
+                        node={node}
+                        isSelected={selectedNodeId === node.id}
+                        onSelect={setSelectedNodeId}
+                        onDelete={handleDeleteNode}
+                        onMouseDown={handleNodeMouseDown}
+                        onConnectStart={handleConnectStart}
+                        onConnectEnd={handleConnectEnd}
+                      />
+                  ))}
+              </div>
+          </div>
+          
+          {/* Properties Panel - Now Draggable */}
+          <PropertiesPanel 
+            node={selectedNode}
+            inputData={inputNode?.data.outputData}
+            onUpdateNode={handleUpdateNode}
+            isOpen={isPanelOpen}
+            onToggle={() => setIsPanelOpen(!isPanelOpen)}
+            activeTab={activePanelTab}
+            onTabChange={setActivePanelTab}
+          />
       </div>
     </div>
   );

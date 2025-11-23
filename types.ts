@@ -14,7 +14,8 @@ export enum TransformType {
     GROUP_BY = 'GROUP_BY',
     LIMIT = 'LIMIT',
     RENAME = 'RENAME',
-    DROP = 'DROP'
+    DROP = 'DROP',
+    CLEAN = 'CLEAN'
 }
 
 export interface NodeData {
