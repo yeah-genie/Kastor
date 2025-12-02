@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-900 text-slate-100;
+}
+
+/* React Flow custom styles */
+.react-flow__node {
+  @apply cursor-pointer;
+}
+
+.react-flow__edge {
+  @apply cursor-pointer;
+}
+
+.react-flow__handle {
+  @apply cursor-crosshair;
+}
