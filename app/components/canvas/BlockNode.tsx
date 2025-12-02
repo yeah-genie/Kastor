@@ -10,8 +10,9 @@ import {
   BarChart3,
   Lightbulb,
 } from 'lucide-react';
-import { BlockData, BlockType } from '@/app/lib/types';
+import { BlockData, BlockType, DataSourceConfig } from '@/app/lib/types';
 import { useCanvasStore } from '@/app/lib/store';
+import { DataSourceBlock } from '../blocks/DataSourceBlock';
 
 // Icon mapping for block types
 const BLOCK_ICONS: Record<BlockType, React.ReactNode> = {
@@ -83,7 +84,8 @@ const getConfigSummary = (data: BlockData): string => {
   }
 };
 
-const BlockNode = memo(({ data, selected }: NodeProps<BlockData>) => {
+const BlockNode = memo(({ data, selected, id }: NodeProps<BlockData>) => {
+  const { updateBlockConfig, updateBlockStatus } = useCanvasStore();
   const colorClasses = BLOCK_COLOR_CLASSES[data.type];
   const icon = BLOCK_ICONS[data.type];
   const configSummary = getConfigSummary(data);
@@ -123,16 +125,32 @@ const BlockNode = memo(({ data, selected }: NodeProps<BlockData>) => {
       </div>
 
       {/* Body */}
-      <div className="px-4 py-3">
-        <div className="text-sm text-slate-400">{configSummary}</div>
-        {data.error && (
-          <div className="mt-2 text-xs text-red-400 bg-red-500/10 rounded px-2 py-1">
-            {data.error}
-          </div>
-        )}
-        {data.outputTable && (
-          <div className="mt-2 text-xs text-emerald-400 bg-emerald-500/10 rounded px-2 py-1">
-            Output: {data.outputTable}
+      <div>
+        {data.type === 'datasource' ? (
+          <DataSourceBlock
+            blockId={id}
+            config={data.config as DataSourceConfig}
+            onConfigUpdate={(config) => updateBlockConfig(id, config)}
+            onStatusUpdate={(status, error) => {
+              updateBlockStatus(id, status);
+              if (error) {
+                updateBlockConfig(id, { ...data.config, error } as any);
+              }
+            }}
+          />
+        ) : (
+          <div className="px-4 py-3">
+            <div className="text-sm text-slate-400">{configSummary}</div>
+            {data.error && (
+              <div className="mt-2 text-xs text-red-400 bg-red-500/10 rounded px-2 py-1">
+                {data.error}
+              </div>
+            )}
+            {data.outputTable && (
+              <div className="mt-2 text-xs text-emerald-400 bg-emerald-500/10 rounded px-2 py-1">
+                Output: {data.outputTable}
+              </div>
+            )}
           </div>
         )}
       </div>

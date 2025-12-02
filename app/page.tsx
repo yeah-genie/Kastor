@@ -2,8 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Package, Settings, BarChart3, CheckCircle2, XCircle } from 'lucide-react';
+import { Package, Settings, CheckCircle2, XCircle } from 'lucide-react';
 import { useDuckDBContext } from './providers/DuckDBProvider';
+import { BlockPalette } from './components/panels/BlockPalette';
+import { ResultsPanel } from './components/panels/ResultsPanel';
+import { DataSourceConfigPanel } from './components/panels/configs/DataSourceConfigPanel';
+import { useCanvasStore } from './lib/store';
+import { DataSourceConfig } from './lib/types';
 
 // Dynamically import BlockCanvas to avoid SSR issues with React Flow
 const BlockCanvas = dynamic(() => import('./components/canvas/BlockCanvas'), {
@@ -17,8 +22,10 @@ const BlockCanvas = dynamic(() => import('./components/canvas/BlockCanvas'), {
 
 export default function Home() {
   const { isReady, executeQuery } = useDuckDBContext();
+  const { selectedBlockId, nodes, updateBlockConfig, updateBlockStatus } = useCanvasStore();
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
+  const [previewTable, setPreviewTable] = useState<string | undefined>(undefined);
 
   // Run test query when DuckDB is ready
   useEffect(() => {
@@ -37,6 +44,19 @@ export default function Home() {
       runTest();
     }
   }, [isReady, executeQuery]);
+
+  // Get selected block
+  const selectedBlock = nodes.find((n) => n.id === selectedBlockId);
+  const isDataSource = selectedBlock?.data.type === 'datasource';
+
+  const handlePreview = () => {
+    if (isDataSource && selectedBlock) {
+      const config = selectedBlock.data.config as DataSourceConfig;
+      if (config.tableName) {
+        setPreviewTable(config.tableName);
+      }
+    }
+  };
   return (
     <div className="flex flex-col h-screen bg-slate-950">
       {/* Main Content Area */}
@@ -50,27 +70,7 @@ export default function Home() {
             </div>
           </div>
           <div className="flex-1 p-4 overflow-y-auto">
-            <div className="space-y-2">
-              {/* Placeholder for block palette */}
-              <div className="p-3 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-400">
-                Datasource
-              </div>
-              <div className="p-3 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-400">
-                Filter
-              </div>
-              <div className="p-3 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-400">
-                Aggregate
-              </div>
-              <div className="p-3 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-400">
-                Sort
-              </div>
-              <div className="p-3 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-400">
-                Chart
-              </div>
-              <div className="p-3 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-400">
-                Insight
-              </div>
-            </div>
+            <BlockPalette />
           </div>
         </div>
 
@@ -81,18 +81,8 @@ export default function Home() {
           </div>
 
           {/* Bottom Panel - Results */}
-          <div className="h-[200px] bg-slate-900 border-t border-slate-800 flex flex-col">
-            <div className="p-3 border-b border-slate-800">
-              <div className="flex items-center gap-2 text-slate-100">
-                <BarChart3 className="w-4 h-4" />
-                <h3 className="font-medium text-sm">Results</h3>
-              </div>
-            </div>
-            <div className="flex-1 p-4 overflow-auto">
-              <div className="text-sm text-slate-500 text-center">
-                Results will appear here when blocks are executed
-              </div>
-            </div>
+          <div className="h-[200px] bg-slate-900 border-t border-slate-800">
+            <ResultsPanel previewTable={previewTable} />
           </div>
         </div>
 
@@ -105,9 +95,22 @@ export default function Home() {
             </div>
           </div>
           <div className="flex-1 p-4 overflow-y-auto">
-            <div className="text-sm text-slate-500 text-center mb-4">
-              Select a block to configure
-            </div>
+            {!selectedBlock ? (
+              <div className="text-sm text-slate-500 text-center mb-4">
+                Select a block to configure
+              </div>
+            ) : isDataSource ? (
+              <DataSourceConfigPanel
+                blockId={selectedBlock.id}
+                config={selectedBlock.data.config as DataSourceConfig}
+                onConfigUpdate={(config) => updateBlockConfig(selectedBlock.id, config)}
+                onPreview={handlePreview}
+              />
+            ) : (
+              <div className="text-sm text-slate-500 text-center">
+                Configuration for {selectedBlock.data.type} blocks coming soon
+              </div>
+            )}
 
             {/* DuckDB Status Test */}
             <div className="mt-4 p-3 bg-slate-800 rounded-lg border border-slate-700">
