@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Package, Settings, BarChart3 } from 'lucide-react';
+import { Package, Settings, BarChart3, CheckCircle2, XCircle } from 'lucide-react';
+import { useDuckDBContext } from './providers/DuckDBProvider';
 
 // Dynamically import BlockCanvas to avoid SSR issues with React Flow
 const BlockCanvas = dynamic(() => import('./components/canvas/BlockCanvas'), {
@@ -15,6 +16,27 @@ const BlockCanvas = dynamic(() => import('./components/canvas/BlockCanvas'), {
 });
 
 export default function Home() {
+  const { isReady, executeQuery } = useDuckDBContext();
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+
+  // Run test query when DuckDB is ready
+  useEffect(() => {
+    if (isReady) {
+      const runTest = async () => {
+        try {
+          console.log('🦆 DuckDB is ready! Running test query...');
+          const result = await executeQuery('SELECT 1 + 1 as result');
+          console.log('✅ Test query result:', result);
+          setTestResult(`Test query passed: 1 + 1 = ${result[0].result}`);
+        } catch (error) {
+          console.error('❌ Test query failed:', error);
+          setTestError(error instanceof Error ? error.message : 'Unknown error');
+        }
+      };
+      runTest();
+    }
+  }, [isReady, executeQuery]);
   return (
     <div className="flex flex-col h-screen bg-slate-950">
       {/* Main Content Area */}
@@ -83,8 +105,30 @@ export default function Home() {
             </div>
           </div>
           <div className="flex-1 p-4 overflow-y-auto">
-            <div className="text-sm text-slate-500 text-center">
+            <div className="text-sm text-slate-500 text-center mb-4">
               Select a block to configure
+            </div>
+
+            {/* DuckDB Status Test */}
+            <div className="mt-4 p-3 bg-slate-800 rounded-lg border border-slate-700">
+              <div className="text-xs font-semibold text-slate-400 mb-2">
+                DuckDB Status
+              </div>
+              {testResult && (
+                <div className="flex items-start gap-2 text-xs text-green-400">
+                  <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>{testResult}</span>
+                </div>
+              )}
+              {testError && (
+                <div className="flex items-start gap-2 text-xs text-red-400">
+                  <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>{testError}</span>
+                </div>
+              )}
+              {!testResult && !testError && (
+                <div className="text-xs text-slate-500">Testing...</div>
+              )}
             </div>
           </div>
         </div>
