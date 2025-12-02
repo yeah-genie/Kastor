@@ -1,0 +1,118 @@
+# Kastor - Visual Data Analysis Tool
+
+## Project Overview
+A visual data analysis tool where users can:
+1. Upload CSV data
+2. Ask questions in natural language ("Show me sales trends")
+3. See the analysis process as connected blocks that appear step by step
+4. Edit any block to modify the analysis
+5. Get AI-generated business insights at the end
+
+## Tech Stack
+- Vite + React
+- TypeScript
+- Tailwind CSS
+- React Flow for the block editor canvas
+- Recharts for visualizations
+- DuckDB-WASM for in-browser SQL execution
+
+## Core Architecture
+
+### Block System
+Each block has:
+- id: string
+- type: 'datasource' | 'filter' | 'aggregate' | 'sort' | 'chart' | 'insight'
+- config: type-specific configuration object
+- inputId: string | null (connected block's id)
+- outputTableName: string | null (DuckDB table name)
+- status: 'idle' | 'running' | 'success' | 'error'
+
+### Block Types & Configs
+
+1. DataSource
+   - config: { fileName: string, tableName: string }
+   - output: DuckDB table name
+   
+2. Filter
+   - config: { column: string, operator: '=' | '>' | '<' | 'contains', value: any }
+   - input: table name
+   - output: filtered table name
+   
+3. Aggregate
+   - config: { groupBy: string[], metrics: { column: string, func: 'sum' | 'avg' | 'count' | 'min' | 'max' }[] }
+   - input: table name
+   - output: aggregated table name
+   
+4. Sort
+   - config: { column: string, direction: 'asc' | 'desc' }
+   - input: table name
+   - output: sorted table name
+   
+5. Chart
+   - config: { type: 'line' | 'bar' | 'pie', xAxis: string, yAxis: string }
+   - input: table name
+   - output: rendered visualization
+   
+6. Insight
+   - config: { prompt: string }
+   - input: table name + analysis context
+   - output: AI-generated business recommendation text
+
+### Data Flow Engine
+- When a block executes, it generates a DuckDB SQL query
+- Each block creates a temp table: `temp_{blockId}`
+- Downstream blocks reference upstream table names
+- When user edits a block, re-execute that block and all downstream blocks
+
+### Layout
+- Left panel (256px): Block palette + Data sources list
+- Center: React Flow canvas with blocks and connections
+- Right panel (320px): Selected block's config editor
+- Bottom panel (208px, collapsible): Query results table + Chart display
+
+### Key Interactions
+1. Drag block from palette → drops on canvas
+2. Connect blocks by dragging from output handle to input handle
+3. Click block → shows config in right panel
+4. Edit config → block re-executes → downstream updates
+5. Natural language input at top → AI generates block sequence → blocks animate onto canvas one by one (Phase 2)
+
+### File Structure
+```
+/src
+  /components
+    /flow
+      /BlockCanvas.tsx (React Flow wrapper)
+      /BlockNode.tsx (custom node component)
+    /editor
+      /DataEditor.tsx (main editor layout)
+      /BlockPalette.tsx (draggable block types)
+      /ConfigPanel.tsx (block configuration)
+      /ResultsPanel.tsx (query results & charts)
+  /lib
+    /duckdb.ts (DuckDB-WASM setup & query execution)
+    /sqlGenerator.ts (block config → SQL query)
+    /types.ts (TypeScript interfaces)
+  /hooks
+    /useDuckDB.ts (DuckDB initialization hook)
+    /useBlockExecution.ts (block execution logic)
+  /store
+    /useFlowStore.ts (Zustand store for React Flow state)
+/public
+  /sample-data (sample CSV files)
+```
+
+## Phase Status
+✅ Phase 1 Complete:
+- DuckDB-WASM initialization
+- React Flow canvas with custom BlockNode
+- DataSource block (CSV upload → DuckDB table)
+- Filter, Aggregate, Sort blocks with config panels
+- Chart block with Recharts visualization
+- Block execution engine with SQL generation
+- Results panel with table and chart views
+
+🔲 Phase 2 (TODO):
+- Natural language input → AI generates block sequence
+- Block animation on canvas
+- Insight block with AI-generated recommendations

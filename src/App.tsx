@@ -1,9 +1,7 @@
-import { MainLayout } from './components/layout/MainLayout';
+import DataEditor from './components/editor/DataEditor';
 
 function App() {
-  return (
-    <MainLayout />
-  );
+  return <DataEditor />;
 }
 
 export default App;
